@@ -58,8 +58,8 @@ cat > "$BUILD_DIR/.profile.d/10-connection-string.sh" <<'EOF'
 #!/usr/bin/env bash
 # Convert Scalingo postgres:// URI to Npgsql key-value connection string.
 # Npgsql does not parse postgres:// URIs — it needs Host=...;Port=... format.
-if [[ -z "${ConnectionStrings__DefaultConnection:-}" && -n "${SCALINGO_POSTGRES_URL:-}" ]]; then
-  url="$SCALINGO_POSTGRES_URL"
+if [[ -z "${ConnectionStrings__DefaultConnection:-}" && -n "${SCALINGO_POSTGRESQL_URL:-}" ]]; then
+  url="$SCALINGO_POSTGRESQL_URL"
   rest="${url#*://}"
   userinfo="${rest%%@*}"
   hostpart="${rest#*@}"
@@ -102,7 +102,7 @@ if [[ -n "\${ConnectionStrings__DefaultConnection:-}" ]]; then
   echo "ConnectionStrings__DefaultConnection is SET (length: \${#ConnectionStrings__DefaultConnection})"
 else
   echo "WARNING: ConnectionStrings__DefaultConnection is NOT SET"
-  echo "SCALINGO_POSTGRES_URL present: \$([[ -n "\${SCALINGO_POSTGRES_URL:-}" ]] && echo yes || echo no)"
+  echo "SCALINGO_POSTGRESQL_URL present: \$([[ -n "\${SCALINGO_POSTGRESQL_URL:-}" ]] && echo yes || echo no)"
 fi
 
 export DOTNET_ROOT="/app/.scalingo/dotnet"
