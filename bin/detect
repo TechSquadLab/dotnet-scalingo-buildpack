@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BUILD_DIR="$1"
+
+if find "$BUILD_DIR" -maxdepth 6 -name '*.csproj' -print -quit | grep -q .; then
+  echo "custom-dotnet"
+  exit 0
+fi
+
+exit 1

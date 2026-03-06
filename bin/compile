@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BUILD_DIR="$1"
+CACHE_DIR="$2"
+ENV_DIR="$3"
+
+read_env() {
+  local key="$1"
+  local default_value="${2:-}"
+  local file="$ENV_DIR/$key"
+  if [[ -f "$file" ]]; then
+    tr -d '\r' < "$file"
+  else
+    printf '%s' "$default_value"
+  fi
+}
+
+PROJECT_FILE="$(read_env PROJECT_FILE "src/Margueritte.Api/Margueritte.Api.csproj")"
+APP_DLL="$(read_env APP_DLL "Margueritte.Api.dll")"
+DOTNET_VERSION="$(read_env DOTNET_VERSION "10.0.102")"
+
+if [[ ! -f "$BUILD_DIR/$PROJECT_FILE" ]]; then
+  echo "ERROR: PROJECT_FILE '$PROJECT_FILE' not found in app source."
+  echo "Set PROJECT_FILE to your .csproj path (example: src/Margueritte.Api/Margueritte.Api.csproj)."
+  exit 1
+fi
+
+echo "-----> Installing .NET SDK $DOTNET_VERSION"
+INSTALL_SCRIPT="$CACHE_DIR/dotnet-install.sh"
+if [[ ! -f "$INSTALL_SCRIPT" ]]; then
+  curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$INSTALL_SCRIPT"
+fi
+
+SDK_CACHE_DIR="$CACHE_DIR/dotnet-sdk-$DOTNET_VERSION"
+if [[ ! -x "$SDK_CACHE_DIR/dotnet" ]]; then
+  mkdir -p "$SDK_CACHE_DIR"
+  bash "$INSTALL_SCRIPT" --install-dir "$SDK_CACHE_DIR" --version "$DOTNET_VERSION"
+fi
+
+APP_DOTNET_DIR="$BUILD_DIR/.scalingo/dotnet"
+rm -rf "$APP_DOTNET_DIR"
+mkdir -p "$APP_DOTNET_DIR"
+cp -a "$SDK_CACHE_DIR/." "$APP_DOTNET_DIR/"
+
+export DOTNET_ROOT="$APP_DOTNET_DIR"
+export PATH="$DOTNET_ROOT:$PATH"
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+export DOTNET_NOLOGO=1
+
+echo "-----> Restoring and publishing $PROJECT_FILE"
+PUBLISH_DIR="$BUILD_DIR/.scalingo/publish"
+dotnet restore "$BUILD_DIR/$PROJECT_FILE" --nologo
+dotnet publish "$BUILD_DIR/$PROJECT_FILE" -c Release -o "$PUBLISH_DIR" --nologo
+
+mkdir -p "$BUILD_DIR/.profile.d"
+cat > "$BUILD_DIR/.profile.d/10-connection-string.sh" <<'EOF'
+#!/usr/bin/env bash
+# Map Scalingo's SCALINGO_POSTGRES_URL to ASP.NET ConnectionStrings if not explicitly set.
+if [[ -z "${ConnectionStrings__DefaultConnection:-}" && -n "${SCALINGO_POSTGRES_URL:-}" ]]; then
+  export ConnectionStrings__DefaultConnection="$SCALINGO_POSTGRES_URL"
+fi
+EOF
+chmod +x "$BUILD_DIR/.profile.d/10-connection-string.sh"
+
+cat > "$BUILD_DIR/.scalingo/start.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export DOTNET_ROOT="/app/.scalingo/dotnet"
+export PATH="\$DOTNET_ROOT:\$PATH"
+export ASPNETCORE_URLS="http://0.0.0.0:\${PORT:-8080}"
+exec dotnet "/app/.scalingo/publish/$APP_DLL"
+EOF
+chmod +x "$BUILD_DIR/.scalingo/start.sh"
+
+echo "-----> Build complete"
