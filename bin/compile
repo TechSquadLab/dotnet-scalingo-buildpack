@@ -53,17 +53,6 @@ PUBLISH_DIR="$BUILD_DIR/.scalingo/publish"
 dotnet restore "$BUILD_DIR/$PROJECT_FILE" --nologo
 dotnet publish "$BUILD_DIR/$PROJECT_FILE" -c Release -o "$PUBLISH_DIR" --nologo
 
-# Copy SQL migrations into the build output.
-# The app resolves migrations at ContentRootPath/../../db/migrations.
-# At runtime ContentRootPath=/app, so it expects /db/migrations.
-# start.sh creates a symlink from /db/migrations -> /app/db/migrations.
-if [[ -d "$BUILD_DIR/db/migrations" ]]; then
-  echo "-----> Copying SQL migrations"
-  cp -a "$BUILD_DIR/db/migrations" "$BUILD_DIR/db_migrations_copy"
-  mkdir -p "$BUILD_DIR/db"
-  mv "$BUILD_DIR/db_migrations_copy" "$BUILD_DIR/db/migrations"
-fi
-
 mkdir -p "$BUILD_DIR/.profile.d"
 cat > "$BUILD_DIR/.profile.d/10-connection-string.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -108,16 +97,12 @@ if [[ -d /app/.profile.d ]]; then
   done
 fi
 
-# App expects migrations at /db/migrations (ContentRootPath/../../db/migrations).
-# Create symlink from /db/migrations -> /app/db/migrations.
-if [[ -d /app/db/migrations && ! -e /db/migrations ]]; then
-  mkdir -p /db
-  ln -s /app/db/migrations /db/migrations
-fi
-
 export DOTNET_ROOT="/app/.scalingo/dotnet"
 export PATH="\$DOTNET_ROOT:\$PATH"
 export ASPNETCORE_URLS="http://0.0.0.0:\${PORT:-8080}"
+if [[ -z "\${Migrations__Path:-}" && -d /app/db/migrations ]]; then
+  export Migrations__Path="/app/db/migrations"
+fi
 exec dotnet "/app/.scalingo/publish/$APP_DLL"
 EOF
 chmod +x "$BUILD_DIR/.scalingo/start.sh"
