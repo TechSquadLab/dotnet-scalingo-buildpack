@@ -53,6 +53,17 @@ PUBLISH_DIR="$BUILD_DIR/.scalingo/publish"
 dotnet restore "$BUILD_DIR/$PROJECT_FILE" --nologo
 dotnet publish "$BUILD_DIR/$PROJECT_FILE" -c Release -o "$PUBLISH_DIR" --nologo
 
+# Copy SQL migrations into the build output.
+# The app resolves migrations at ContentRootPath/../../db/migrations.
+# At runtime ContentRootPath=/app, so it expects /db/migrations.
+# start.sh creates a symlink from /db/migrations -> /app/db/migrations.
+if [[ -d "$BUILD_DIR/db/migrations" ]]; then
+  echo "-----> Copying SQL migrations"
+  cp -a "$BUILD_DIR/db/migrations" "$BUILD_DIR/db_migrations_copy"
+  mkdir -p "$BUILD_DIR/db"
+  mv "$BUILD_DIR/db_migrations_copy" "$BUILD_DIR/db/migrations"
+fi
+
 mkdir -p "$BUILD_DIR/.profile.d"
 cat > "$BUILD_DIR/.profile.d/10-connection-string.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -90,19 +101,18 @@ cat > "$BUILD_DIR/.scalingo/start.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Source .profile.d scripts (Scalingo should do this, but ensure it explicitly)
+# Source .profile.d scripts to set up environment (connection string, etc.)
 if [[ -d /app/.profile.d ]]; then
   for f in /app/.profile.d/*.sh; do
     [[ -f "\$f" ]] && source "\$f"
   done
 fi
 
-# Debug: log whether connection string is set (value redacted)
-if [[ -n "\${ConnectionStrings__DefaultConnection:-}" ]]; then
-  echo "ConnectionStrings__DefaultConnection is SET (length: \${#ConnectionStrings__DefaultConnection})"
-else
-  echo "WARNING: ConnectionStrings__DefaultConnection is NOT SET"
-  echo "SCALINGO_POSTGRESQL_URL present: \$([[ -n "\${SCALINGO_POSTGRESQL_URL:-}" ]] && echo yes || echo no)"
+# App expects migrations at /db/migrations (ContentRootPath/../../db/migrations).
+# Create symlink from /db/migrations -> /app/db/migrations.
+if [[ -d /app/db/migrations && ! -e /db/migrations ]]; then
+  mkdir -p /db
+  ln -s /app/db/migrations /db/migrations
 fi
 
 export DOTNET_ROOT="/app/.scalingo/dotnet"
