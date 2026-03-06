@@ -89,6 +89,22 @@ chmod +x "$BUILD_DIR/.profile.d/10-connection-string.sh"
 cat > "$BUILD_DIR/.scalingo/start.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Source .profile.d scripts (Scalingo should do this, but ensure it explicitly)
+if [[ -d /app/.profile.d ]]; then
+  for f in /app/.profile.d/*.sh; do
+    [[ -f "\$f" ]] && source "\$f"
+  done
+fi
+
+# Debug: log whether connection string is set (value redacted)
+if [[ -n "\${ConnectionStrings__DefaultConnection:-}" ]]; then
+  echo "ConnectionStrings__DefaultConnection is SET (length: \${#ConnectionStrings__DefaultConnection})"
+else
+  echo "WARNING: ConnectionStrings__DefaultConnection is NOT SET"
+  echo "SCALINGO_POSTGRES_URL present: \$([[ -n "\${SCALINGO_POSTGRES_URL:-}" ]] && echo yes || echo no)"
+fi
+
 export DOTNET_ROOT="/app/.scalingo/dotnet"
 export PATH="\$DOTNET_ROOT:\$PATH"
 export ASPNETCORE_URLS="http://0.0.0.0:\${PORT:-8080}"
