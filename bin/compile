@@ -53,39 +53,6 @@ PUBLISH_DIR="$BUILD_DIR/.scalingo/publish"
 dotnet restore "$BUILD_DIR/$PROJECT_FILE" --nologo
 dotnet publish "$BUILD_DIR/$PROJECT_FILE" -c Release -o "$PUBLISH_DIR" --nologo
 
-mkdir -p "$BUILD_DIR/.profile.d"
-cat > "$BUILD_DIR/.profile.d/10-connection-string.sh" <<'EOF'
-#!/usr/bin/env bash
-# Convert Scalingo postgres:// URI to Npgsql key-value connection string.
-# Npgsql does not parse postgres:// URIs — it needs Host=...;Port=... format.
-if [[ -z "${ConnectionStrings__DefaultConnection:-}" && -n "${SCALINGO_POSTGRESQL_URL:-}" ]]; then
-  url="$SCALINGO_POSTGRESQL_URL"
-  rest="${url#*://}"
-  userinfo="${rest%%@*}"
-  hostpart="${rest#*@}"
-  user="${userinfo%%:*}"
-  pass="${userinfo#*:}"
-  hostport="${hostpart%%/*}"
-  dbquery="${hostpart#*/}"
-  host="${hostport%%:*}"
-  port="${hostport#*:}"
-  db="${dbquery%%\?*}"
-  query="${dbquery#*\?}"
-  sslmode=""
-  if [[ "$query" == *"sslmode="* ]]; then
-    sslmode="${query#*sslmode=}"
-    sslmode="${sslmode%%&*}"
-  fi
-  conn="Host=${host};Port=${port};Database=${db};Username=${user};Password=${pass}"
-  if [[ -n "$sslmode" ]]; then
-    sslmode="$(echo "$sslmode" | sed 's/prefer/Prefer/;s/require/Require/;s/disable/Disable/')"
-    conn="${conn};SSL Mode=${sslmode}"
-  fi
-  export ConnectionStrings__DefaultConnection="$conn"
-fi
-EOF
-chmod +x "$BUILD_DIR/.profile.d/10-connection-string.sh"
-
 cat > "$BUILD_DIR/.scalingo/start.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
