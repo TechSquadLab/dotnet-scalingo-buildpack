@@ -70,7 +70,9 @@ export ASPNETCORE_URLS="http://0.0.0.0:\${PORT:-8080}"
 if [[ -z "\${Migrations__Path:-}" && -d /app/db/migrations ]]; then
   export Migrations__Path="/app/db/migrations"
 fi
-exec dotnet "/app/.scalingo/publish/$APP_DLL"
+export ASPNETCORE_CONTENTROOT="/app/.scalingo/publish"
+cd "/app/.scalingo/publish"
+exec dotnet "./$APP_DLL"
 EOF
 chmod +x "$BUILD_DIR/.scalingo/start.sh"
 
